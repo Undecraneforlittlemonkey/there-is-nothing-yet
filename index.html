@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PARADAEISE JUMP</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden; /* Empêche le scroll de la page */
+            touch-action: none; /* Empêche les gestes par défaut sur mobile */
+        }
+        canvas {
+            background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%);
+            display: block;
+            /* Le canvas prend toute la largeur max mais garde un ratio correct sur PC */
+            max-width: 500px; 
+            width: 100%;
+            height: 100%;
+        }
+        #ui {
+            position: absolute;
+            top: 40px; /* Plus bas pour éviter l'encoche des iPhones */
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            pointer-events: none;
+            color: white;
+            text-shadow: 2px 2px 0 #000;
+            width: 100%;
+            z-index: 10;
+        }
+        h1 { margin: 0; font-size: 28px; letter-spacing: 2px; font-weight: 900; }
+        p { margin: 5px 0; font-size: 20px; font-weight: bold;}
+        
+        #gameOverScreen {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            border: 4px solid #FF69B4;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            width: 80%;
+            max-width: 300px;
+            z-index: 20;
+        }
+        
+        /* Instructions tactiles */
+        #controls-hint {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        button {
+            background: #FF69B4;
+            border: none;
+            padding: 15px 30px;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+            cursor: pointer;
+            margin-top: 15px;
+            border-radius: 50px;
+            font-family: inherit;
+            text-transform: uppercase;
+            box-shadow: 0 4px 0 #C71585;
+            transition: all 0.1s;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #C71585;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>PARADAEISE</h1>
+        <p>Score: <span id="score">0</span></p>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="controls-hint">
+        <p><-- Appuie gauche | Appuie droite --></p>
+    </div>
+
+    <div id="gameOverScreen">
+        <h2 style="color:#FF69B4; margin-top:0;">GAME OVER</h2>
+        <p>Score Final</p>
+        <p style="font-size: 40px; color: #000;">RECORDE: <span id="finalScore">0</span></p>
+        <p style="font-size: 12px; color: #666; margin-top: 10px;">Screen ton score et identifie le BDE !</p>
+        <button onclick="resetGame()">REJOUER</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const finalScoreEl = document.getElementById('finalScore');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+
+        // Ajustement Canvas Plein Écran Mobile
+        function resizeCanvas() {
+            canvas.width = window.innerWidth > 500 ? 500 : window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Variables du jeu
+        let platforms = [];
+        let score = 0;
+        let gameRunning = true;
+        let frameCount = 0;
+
+        // Physique ajustée pour mobile
+        const gravity = 0.4;
+        const jumpStrength = -11; // Un peu plus haut pour compenser la hauteur des écrans
+        
+        // Joueur
+        const player = {
+            x: canvas.width / 2 - 20,
+            y: canvas.height - 200,
+            width: 40,
+            height: 40,
+            dy: 0,
+            dx: 0,
+            speed: 6, // Un peu plus rapide
+            facingRight: true
+        };
+
+        // Contrôles (Clavier + Tactile)
+        let input = { left: false, right: false };
+
+        // Clavier
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft') input.left = true;
+            if (e.code === 'ArrowRight') input.right = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft') input.left = false;
+            if (e.code === 'ArrowRight') input.right = false;
+        });
+
+        // Tactile (Mobile)
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Empêche le scroll
+            const touchX = e.touches[0].clientX;
+            const middle = window.innerWidth / 2;
+            
+            if (touchX < middle) {
+                input.left = true;
+                input.right = false;
+            } else {
+                input.right = true;
+                input.left = false;
+            }
+        }, {passive: false});
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            input.left = false;
+            input.right = false;
+        });
+
+        // Génération plateformes
+        function initPlatforms() {
+            platforms = [];
+            let platformCount = Math.floor(canvas.height / 80); // Densité selon la hauteur
+            for (let i = 0; i < platformCount; i++) {
+                platforms.push({
+                    x: Math.random() * (canvas.width - 70),
+                    y: canvas.height - (100 * i) - 50,
+                    width: 70,
+                    height: 15,
+                    type: 'cloud'
+                });
+            }
+        }
+
+        function drawPlayer() {
+            const p = player;
+            ctx.save();
+            
+            // Gestion direction
+            if (!p.facingRight) {
+                ctx.translate(p.x + p.width, p.y);
+                ctx.scale(-1, 1);
+                ctx.translate(-(p.x + p.width), -p.y); 
+                ctx.translate(-p.width, 0); 
+            }
+
+            let baseX = p.x;
+            let baseY = p.y;
+            let wingOffset = (Math.floor(frameCount / 8) % 2 === 0) ? 0 : 3;
+
+            // Pixel Art Ange (Code identique mais optimisé)
+            // Ailes
+            ctx.fillStyle = '#FFF';
+            ctx.fillRect(baseX - 8, baseY + 10 + wingOffset, 10, 15); // G
+            ctx.fillRect(baseX + 38, baseY + 10 + wingOffset, 8, 12); // D
+            
+            // Corps
+            ctx.fillStyle = '#FF69B4'; // Rose
+            ctx.fillRect(baseX + 8, baseY + 15, 24, 25);
+            
+            // Motifs chemise
+            ctx.fillStyle = '#32CD32'; 
+            ctx.fillRect(baseX + 12, baseY + 20, 4, 4);
+            ctx.fillRect(baseX + 22, baseY + 30, 4, 4);
+
+            // Peau
+            ctx.fillStyle = '#E0AC69';
+            ctx.fillRect(baseX + 10, baseY, 20, 18); // Tête
+            ctx.fillRect(baseX + 6, baseY + 18, 8, 12); // Bras G
+            ctx.fillRect(baseX + 26, baseY + 18, 8, 12); // Bras D
+
+            // Cheveux
+            ctx.fillStyle = '#FFFACD'; 
+            ctx.fillRect(baseX + 8, baseY - 4, 24, 8);
+            ctx.fillRect(baseX + 6, baseY, 6, 12);
+            ctx.fillRect(baseX + 28, baseY, 6, 12);
+
+            // Lunettes
+            ctx.fillStyle = '#000';
+            ctx.fillRect(baseX + 14, baseY + 6, 16, 4); 
+
+            // Auréole
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.ellipse(baseX + 20, baseY - 10, 12, 4, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            // Mouvement
+            if (input.right) {
+                player.dx = player.speed;
+                player.facingRight = true;
+            } else if (input.left) {
+                player.dx = -player.speed;
+                player.facingRight = false;
+            } else {
+                player.dx = 0;
+            }
+
+            player.x += player.dx;
+
+            // Traversée écran
+            if (player.x + player.width < 0) player.x = canvas.width;
+            else if (player.x > canvas.width) player.x = -player.width;
+
+            // Physique
+            player.dy += gravity;
+            player.y += player.dy;
+
+            // Collisions
+            if (player.dy > 0) {
+                platforms.forEach(plat => {
+                    if (
+                        player.y + player.height > plat.y &&
+                        player.y + player.height < plat.y + plat.height + 15 &&
+                        player.x + player.width > plat.x &&
+                        player.x < plat.x + plat.width
+                    ) {
+                        player.dy = jumpStrength;
+                    }
+                });
+            }
+
+            // Scroll vers le haut
+            if (player.y < canvas.height / 2.5) {
+                let diff = (canvas.height / 2.5) - player.y;
+                player.y = canvas.height / 2.5;
+                
+                platforms.forEach(plat => {
+                    plat.y += diff;
+                    if (plat.y > canvas.height) {
+                        plat.y = -20;
+                        plat.x = Math.random() * (canvas.width - plat.width);
+                        score++;
+                        scoreEl.innerText = score;
+                    }
+                });
+            }
+
+            // Game Over
+            if (player.y > canvas.height) gameOver();
+
+            frameCount++;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Plateformes (Nuages)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            platforms.forEach(plat => {
+                ctx.beginPath();
+                ctx.roundRect(plat.x, plat.y, plat.width, plat.height, 10);
+                ctx.fill();
+            });
+
+            drawPlayer();
+        }
+
+        function loop() {
+            update();
+            draw();
+            if (gameRunning) requestAnimationFrame(loop);
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            finalScoreEl.innerText = score;
+            gameOverScreen.style.display = 'block';
+            document.getElementById('controls-hint').style.display = 'none';
+        }
+
+        function resetGame() {
+            player.y = canvas.height - 200;
+            player.dy = 0;
+            score = 0;
+            scoreEl.innerText = '0';
+            gameOverScreen.style.display = 'none';
+            document.getElementById('controls-hint').style.display = 'block';
+            gameRunning = true;
+            initPlatforms();
+            loop();
+        }
+
+        // Init
+        initPlatforms();
+        loop();
+
+    </script>
+</body>
+</html>
