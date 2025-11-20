@@ -2,8 +2,13 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    
+    <meta name="robots" content="noindex, nofollow">
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
     <title>PARADAEISE JUMP</title>
+    
     <style>
         body {
             margin: 0;
@@ -15,20 +20,19 @@
             height: 100vh;
             width: 100vw;
             font-family: 'Courier New', Courier, monospace;
-            overflow: hidden; /* Empêche le scroll de la page */
-            touch-action: none; /* Empêche les gestes par défaut sur mobile */
+            overflow: hidden;
+            touch-action: none;
         }
         canvas {
             background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%);
             display: block;
-            /* Le canvas prend toute la largeur max mais garde un ratio correct sur PC */
             max-width: 500px; 
             width: 100%;
             height: 100%;
         }
         #ui {
             position: absolute;
-            top: 40px; /* Plus bas pour éviter l'encoche des iPhones */
+            top: 40px;
             left: 50%;
             transform: translateX(-50%);
             text-align: center;
@@ -59,7 +63,6 @@
             z-index: 20;
         }
         
-        /* Instructions tactiles */
         #controls-hint {
             position: absolute;
             bottom: 20px;
@@ -101,13 +104,13 @@
     <canvas id="gameCanvas"></canvas>
     
     <div id="controls-hint">
-        <p><-- Appuie gauche | Appuie droite --></p>
+        <p><-- Gauche | Droite --></p>
     </div>
 
     <div id="gameOverScreen">
         <h2 style="color:#FF69B4; margin-top:0;">GAME OVER</h2>
         <p>Score Final</p>
-        <p style="font-size: 40px; color: #000;">RECORDE: <span id="finalScore">0</span></p>
+        <p style="font-size: 40px; color: #000;">RECORD: <span id="finalScore">0</span></p>
         <p style="font-size: 12px; color: #666; margin-top: 10px;">Screen ton score et identifie le BDE !</p>
         <button onclick="resetGame()">REJOUER</button>
     </div>
@@ -119,7 +122,6 @@
         const finalScoreEl = document.getElementById('finalScore');
         const gameOverScreen = document.getElementById('gameOverScreen');
 
-        // Ajustement Canvas Plein Écran Mobile
         function resizeCanvas() {
             canvas.width = window.innerWidth > 500 ? 500 : window.innerWidth;
             canvas.height = window.innerHeight;
@@ -127,17 +129,14 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // Variables du jeu
         let platforms = [];
         let score = 0;
         let gameRunning = true;
         let frameCount = 0;
 
-        // Physique ajustée pour mobile
         const gravity = 0.4;
-        const jumpStrength = -11; // Un peu plus haut pour compenser la hauteur des écrans
+        const jumpStrength = -11;
         
-        // Joueur
         const player = {
             x: canvas.width / 2 - 20,
             y: canvas.height - 200,
@@ -145,14 +144,12 @@
             height: 40,
             dy: 0,
             dx: 0,
-            speed: 6, // Un peu plus rapide
+            speed: 6,
             facingRight: true
         };
 
-        // Contrôles (Clavier + Tactile)
         let input = { left: false, right: false };
 
-        // Clavier
         document.addEventListener('keydown', (e) => {
             if (e.code === 'ArrowLeft') input.left = true;
             if (e.code === 'ArrowRight') input.right = true;
@@ -162,12 +159,10 @@
             if (e.code === 'ArrowRight') input.right = false;
         });
 
-        // Tactile (Mobile)
         canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // Empêche le scroll
+            e.preventDefault();
             const touchX = e.touches[0].clientX;
             const middle = window.innerWidth / 2;
-            
             if (touchX < middle) {
                 input.left = true;
                 input.right = false;
@@ -183,10 +178,9 @@
             input.right = false;
         });
 
-        // Génération plateformes
         function initPlatforms() {
             platforms = [];
-            let platformCount = Math.floor(canvas.height / 80); // Densité selon la hauteur
+            let platformCount = Math.floor(canvas.height / 80);
             for (let i = 0; i < platformCount; i++) {
                 platforms.push({
                     x: Math.random() * (canvas.width - 70),
@@ -202,7 +196,6 @@
             const p = player;
             ctx.save();
             
-            // Gestion direction
             if (!p.facingRight) {
                 ctx.translate(p.x + p.width, p.y);
                 ctx.scale(-1, 1);
@@ -214,26 +207,25 @@
             let baseY = p.y;
             let wingOffset = (Math.floor(frameCount / 8) % 2 === 0) ? 0 : 3;
 
-            // Pixel Art Ange (Code identique mais optimisé)
             // Ailes
             ctx.fillStyle = '#FFF';
-            ctx.fillRect(baseX - 8, baseY + 10 + wingOffset, 10, 15); // G
-            ctx.fillRect(baseX + 38, baseY + 10 + wingOffset, 8, 12); // D
+            ctx.fillRect(baseX - 8, baseY + 10 + wingOffset, 10, 15);
+            ctx.fillRect(baseX + 38, baseY + 10 + wingOffset, 8, 12);
             
             // Corps
-            ctx.fillStyle = '#FF69B4'; // Rose
+            ctx.fillStyle = '#FF69B4';
             ctx.fillRect(baseX + 8, baseY + 15, 24, 25);
             
-            // Motifs chemise
+            // Motifs
             ctx.fillStyle = '#32CD32'; 
             ctx.fillRect(baseX + 12, baseY + 20, 4, 4);
             ctx.fillRect(baseX + 22, baseY + 30, 4, 4);
 
-            // Peau
+            // Tête
             ctx.fillStyle = '#E0AC69';
-            ctx.fillRect(baseX + 10, baseY, 20, 18); // Tête
-            ctx.fillRect(baseX + 6, baseY + 18, 8, 12); // Bras G
-            ctx.fillRect(baseX + 26, baseY + 18, 8, 12); // Bras D
+            ctx.fillRect(baseX + 10, baseY, 20, 18);
+            ctx.fillRect(baseX + 6, baseY + 18, 8, 12);
+            ctx.fillRect(baseX + 26, baseY + 18, 8, 12);
 
             // Cheveux
             ctx.fillStyle = '#FFFACD'; 
@@ -258,7 +250,6 @@
         function update() {
             if (!gameRunning) return;
 
-            // Mouvement
             if (input.right) {
                 player.dx = player.speed;
                 player.facingRight = true;
@@ -271,15 +262,12 @@
 
             player.x += player.dx;
 
-            // Traversée écran
             if (player.x + player.width < 0) player.x = canvas.width;
             else if (player.x > canvas.width) player.x = -player.width;
 
-            // Physique
             player.dy += gravity;
             player.y += player.dy;
 
-            // Collisions
             if (player.dy > 0) {
                 platforms.forEach(plat => {
                     if (
@@ -293,7 +281,6 @@
                 });
             }
 
-            // Scroll vers le haut
             if (player.y < canvas.height / 2.5) {
                 let diff = (canvas.height / 2.5) - player.y;
                 player.y = canvas.height / 2.5;
@@ -309,7 +296,6 @@
                 });
             }
 
-            // Game Over
             if (player.y > canvas.height) gameOver();
 
             frameCount++;
@@ -318,7 +304,6 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Plateformes (Nuages)
             ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
             platforms.forEach(plat => {
                 ctx.beginPath();
@@ -354,7 +339,6 @@
             loop();
         }
 
-        // Init
         initPlatforms();
         loop();
 
