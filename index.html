@@ -7,7 +7,7 @@
     
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
-    <title>PARADAEISE JUMP</title>
+    <title>TP Maths Algo</title>
     
     <style>
         body {
@@ -53,7 +53,7 @@
             transform: translate(-50%, -50%);
             background: rgba(255, 255, 255, 0.95);
             color: #333;
-            padding: 30px;
+            padding: 25px;
             border-radius: 20px;
             text-align: center;
             border: 4px solid #FF69B4;
@@ -61,6 +61,21 @@
             width: 80%;
             max-width: 300px;
             z-index: 20;
+        }
+
+        /* Message de Super Boost */
+        #boostMessage {
+            display: none;
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #FFD700;
+            font-size: 30px;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+            z-index: 15;
+            pointer-events: none;
         }
         
         #controls-hint {
@@ -101,6 +116,8 @@
         <p>Score: <span id="score">0</span></p>
     </div>
 
+    <div id="boostMessage">DIVINE ASCENSION!</div>
+
     <canvas id="gameCanvas"></canvas>
     
     <div id="controls-hint">
@@ -111,7 +128,7 @@
         <h2 style="color:#FF69B4; margin-top:0;">GAME OVER</h2>
         <p>Score Final</p>
         <p style="font-size: 40px; color: #000;">RECORD: <span id="finalScore">0</span></p>
-        <p style="font-size: 12px; color: #666; margin-top: 10px;">Screen ton score et identifie le BDE !</p>
+        <p style="font-size: 12px; color: #666; margin-top: 10px;">Screen ça pour le BDE !</p>
         <button onclick="resetGame()">REJOUER</button>
     </div>
 
@@ -121,6 +138,7 @@
         const scoreEl = document.getElementById('score');
         const finalScoreEl = document.getElementById('finalScore');
         const gameOverScreen = document.getElementById('gameOverScreen');
+        const boostMsg = document.getElementById('boostMessage');
 
         function resizeCanvas() {
             canvas.width = window.innerWidth > 500 ? 500 : window.innerWidth;
@@ -129,27 +147,35 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
+        // --- CONFIGURATION DU JEU ---
         let platforms = [];
+        let items = []; // Pour les ailes bonus
         let score = 0;
         let gameRunning = true;
         let frameCount = 0;
+        let isSuperBoosting = false;
+        let superBoostTimer = 0;
 
-        const gravity = 0.4;
-        const jumpStrength = -11;
+        // Physique "Flottante" (Plus lent)
+        const gravity = 0.25; // Réduit (était 0.4)
+        const jumpStrength = -9; // Réduit (était -11)
+        const boostStrength = -18; // Trampoline
+        const superBoostSpeed = -15; // Vitesse ascension ailes
         
         const player = {
-            x: canvas.width / 2 - 20,
-            y: canvas.height - 200,
-            width: 40,
+            x: 0, // Sera défini au reset
+            y: 0,
+            width: 40, 
             height: 40,
             dy: 0,
             dx: 0,
-            speed: 6,
+            speed: 5, // Mouvement horizontal un peu plus lent pour la précision
             facingRight: true
         };
 
         let input = { left: false, right: false };
 
+        // --- CONTROLES ---
         document.addEventListener('keydown', (e) => {
             if (e.code === 'ArrowLeft') input.left = true;
             if (e.code === 'ArrowRight') input.right = true;
@@ -163,13 +189,8 @@
             e.preventDefault();
             const touchX = e.touches[0].clientX;
             const middle = window.innerWidth / 2;
-            if (touchX < middle) {
-                input.left = true;
-                input.right = false;
-            } else {
-                input.right = true;
-                input.left = false;
-            }
+            if (touchX < middle) { input.left = true; input.right = false; }
+            else { input.right = true; input.left = false; }
         }, {passive: false});
 
         canvas.addEventListener('touchend', (e) => {
@@ -178,18 +199,83 @@
             input.right = false;
         });
 
-        function initPlatforms() {
-            platforms = [];
-            let platformCount = Math.floor(canvas.height / 80);
-            for (let i = 0; i < platformCount; i++) {
-                platforms.push({
-                    x: Math.random() * (canvas.width - 70),
-                    y: canvas.height - (100 * i) - 50,
-                    width: 70,
-                    height: 15,
-                    type: 'cloud'
+        // --- LOGIQUE PLATEFORMES & ITEMS ---
+
+        function createPlatform(y) {
+            const typeRand = Math.random();
+            let type = 'normal';
+            
+            // Probabilités
+            if (typeRand > 0.90) type = 'boost'; // 10% chance boost (Doré)
+            else if (typeRand > 0.75) type = 'fragile'; // 15% chance fragile (Gris)
+
+            // Item spawn (Ailes) - Rare (2%)
+            if (Math.random() > 0.98) {
+                items.push({
+                    x: Math.random() * (canvas.width - 40),
+                    y: y - 50,
+                    width: 30,
+                    height: 20,
+                    taken: false
                 });
             }
+
+            return {
+                x: Math.random() * (canvas.width - 70),
+                y: y,
+                width: 70,
+                height: 15,
+                type: type,
+                active: true
+            };
+        }
+
+        function initGameObjects() {
+            platforms = [];
+            items = [];
+            
+            // 1. Plateforme de sécurité (Toujours sous les pieds au départ)
+            platforms.push({
+                x: canvas.width / 2 - 35,
+                y: canvas.height - 50,
+                width: 70,
+                height: 15,
+                type: 'normal',
+                active: true
+            });
+
+            // 2. Générer le reste
+            let platformCount = Math.floor(canvas.height / 90); // Espacement augmenté
+            for (let i = 1; i < platformCount; i++) {
+                platforms.push(createPlatform(canvas.height - (100 * i) - 50));
+            }
+
+            // Placer le joueur sur la plateforme de sécurité
+            player.x = canvas.width / 2 - 20;
+            player.y = canvas.height - 150;
+        }
+
+        // --- DESSIN ---
+
+        function drawPixelWings(x, y) {
+            // Dessin des ailes bonus (item)
+            ctx.fillStyle = '#FFF'; // Blanc
+            ctx.strokeStyle = '#FFD700'; // Contour Or
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.quadraticCurveTo(x-10, y-15, x-20, y-5); // Aile gauche
+            ctx.quadraticCurveTo(x-10, y+5, x, y+10);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(x+10, y);
+            ctx.quadraticCurveTo(x+20, y-15, x+30, y-5); // Aile droite
+            ctx.quadraticCurveTo(x+20, y+5, x+10, y+10);
+            ctx.fill();
+            ctx.stroke();
         }
 
         function drawPlayer() {
@@ -205,10 +291,12 @@
 
             let baseX = p.x;
             let baseY = p.y;
-            let wingOffset = (Math.floor(frameCount / 8) % 2 === 0) ? 0 : 3;
+            // Animation Ailes : Si SuperBoost, battement très rapide
+            let beatSpeed = isSuperBoosting ? 2 : 8;
+            let wingOffset = (Math.floor(frameCount / beatSpeed) % 2 === 0) ? 0 : 3;
 
             // Ailes
-            ctx.fillStyle = '#FFF';
+            ctx.fillStyle = isSuperBoosting ? '#FFD700' : '#FFF'; // Ailes dorées si boost
             ctx.fillRect(baseX - 8, baseY + 10 + wingOffset, 10, 15);
             ctx.fillRect(baseX + 38, baseY + 10 + wingOffset, 8, 12);
             
@@ -247,9 +335,12 @@
             ctx.restore();
         }
 
+        // --- MOTEUR DU JEU ---
+
         function update() {
             if (!gameRunning) return;
 
+            // 1. Mouvement Horizontal
             if (input.right) {
                 player.dx = player.speed;
                 player.facingRight = true;
@@ -257,58 +348,135 @@
                 player.dx = -player.speed;
                 player.facingRight = false;
             } else {
-                player.dx = 0;
+                player.dx *= 0.8; // Friction douce
             }
-
             player.x += player.dx;
 
+            // Traversée écran
             if (player.x + player.width < 0) player.x = canvas.width;
             else if (player.x > canvas.width) player.x = -player.width;
 
-            player.dy += gravity;
+            // 2. Mouvement Vertical & Super Boost
+            if (isSuperBoosting) {
+                player.dy = superBoostSpeed;
+                superBoostTimer--;
+                if (superBoostTimer <= 0) {
+                    isSuperBoosting = false;
+                    boostMsg.style.display = 'none';
+                    player.dy = -5; // Petit saut de sortie
+                }
+            } else {
+                player.dy += gravity;
+            }
+            
             player.y += player.dy;
 
-            if (player.dy > 0) {
+            // 3. Collisions Plateformes (Seulement si on tombe et pas en boost)
+            if (player.dy > 0 && !isSuperBoosting) {
                 platforms.forEach(plat => {
+                    if (!plat.active) return;
+
+                    // Hitbox améliorée : On vérifie les PIEDS du joueur
+                    // Hitbox horizontale plus étroite (+10 px de marge de chaque côté)
+                    const feetX = player.x + player.width / 2;
+                    const feetY = player.y + player.height;
+                    
                     if (
-                        player.y + player.height > plat.y &&
-                        player.y + player.height < plat.y + plat.height + 15 &&
-                        player.x + player.width > plat.x &&
-                        player.x < plat.x + plat.width
+                        feetY >= plat.y && 
+                        feetY <= plat.y + plat.height + 15 && // Tolérance épaisseur
+                        player.x + 30 > plat.x && // Marge gauche
+                        player.x + 10 < plat.x + plat.width // Marge droite
                     ) {
-                        player.dy = jumpStrength;
+                        // REBOND !
+                        if (plat.type === 'boost') {
+                            player.dy = boostStrength; // Super saut
+                        } else {
+                            player.dy = jumpStrength; // Saut normal
+                        }
+
+                        if (plat.type === 'fragile') {
+                            plat.active = false; // Disparition
+                        }
                     }
                 });
             }
 
-            if (player.y < canvas.height / 2.5) {
-                let diff = (canvas.height / 2.5) - player.y;
-                player.y = canvas.height / 2.5;
+            // 4. Collision Items (Ailes)
+            items.forEach(item => {
+                if (item.taken) return;
+                if (
+                    player.x < item.x + item.width &&
+                    player.x + player.width > item.x &&
+                    player.y < item.y + item.height &&
+                    player.y + player.height > item.y
+                ) {
+                    item.taken = true;
+                    activateSuperBoost();
+                }
+            });
+
+            // 5. Scrolling (Caméra monte)
+            let scrollThreshold = canvas.height / 2.5;
+            if (player.y < scrollThreshold) {
+                let diff = scrollThreshold - player.y;
+                player.y = scrollThreshold;
                 
                 platforms.forEach(plat => {
                     plat.y += diff;
                     if (plat.y > canvas.height) {
-                        plat.y = -20;
-                        plat.x = Math.random() * (canvas.width - plat.width);
+                        // Recyclage plateforme
+                        Object.assign(plat, createPlatform(-20));
                         score++;
                         scoreEl.innerText = score;
                     }
                 });
+
+                items.forEach(item => {
+                    item.y += diff;
+                });
             }
 
+            // 6. Game Over
             if (player.y > canvas.height) gameOver();
 
             frameCount++;
         }
 
+        function activateSuperBoost() {
+            isSuperBoosting = true;
+            superBoostTimer = 150; // Durée du vol (environ 2.5 secondes)
+            boostMsg.style.display = 'block';
+        }
+
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            // Dessin Plateformes
             platforms.forEach(plat => {
+                if (!plat.active) return;
+
                 ctx.beginPath();
+                if (plat.type === 'normal') {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'; // Blanc
+                } else if (plat.type === 'fragile') {
+                    ctx.fillStyle = 'rgba(200, 200, 200, 0.8)'; // Gris (Fragile)
+                } else if (plat.type === 'boost') {
+                    ctx.fillStyle = '#FFD700'; // Or (Boost)
+                }
+                
                 ctx.roundRect(plat.x, plat.y, plat.width, plat.height, 10);
                 ctx.fill();
+
+                // Petit détail visuel pour le boost
+                if (plat.type === 'boost') {
+                    ctx.fillStyle = '#FFF';
+                    ctx.fillRect(plat.x + 20, plat.y + 2, 30, 4);
+                }
+            });
+
+            // Dessin Items
+            items.forEach(item => {
+                if (!item.taken) drawPixelWings(item.x, item.y);
             });
 
             drawPlayer();
@@ -325,21 +493,22 @@
             finalScoreEl.innerText = score;
             gameOverScreen.style.display = 'block';
             document.getElementById('controls-hint').style.display = 'none';
+            boostMsg.style.display = 'none';
         }
 
         function resetGame() {
-            player.y = canvas.height - 200;
-            player.dy = 0;
             score = 0;
             scoreEl.innerText = '0';
             gameOverScreen.style.display = 'none';
             document.getElementById('controls-hint').style.display = 'block';
             gameRunning = true;
-            initPlatforms();
+            isSuperBoosting = false;
+            initGameObjects();
             loop();
         }
 
-        initPlatforms();
+        // Lancement
+        initGameObjects();
         loop();
 
     </script>
